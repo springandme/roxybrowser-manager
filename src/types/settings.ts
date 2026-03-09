@@ -37,6 +37,7 @@ export interface WebDavSnapshotMeta {
     createdAt: string;
     userCount: number;
     currentUser: string | null;
+    userEmails: string[];
     sourcePlatform: string;
     sourceHost: string;
     sizeBytes: number;

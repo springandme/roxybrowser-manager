@@ -39,6 +39,7 @@ interface AppState {
     syncToWebDav: (silent?: boolean) => Promise<SyncOperationResult>;
     pullLatestFromWebDav: (silent?: boolean) => Promise<SyncOperationResult>;
     restoreWebDavSnapshot: (snapshotId: string, silent?: boolean) => Promise<SyncOperationResult>;
+    deleteWebDavSnapshot: (snapshotId: string, silent?: boolean) => Promise<SyncOperationResult>;
     switchUser: (email: string) => Promise<void>;
     deleteUser: (email: string) => Promise<void>;
     startRoxy: () => Promise<void>;
@@ -159,13 +160,25 @@ export const useStore = create<AppState>((set, get) => {
         },
 
         restoreWebDavSnapshot: async (snapshotId: string, silent = false) => {
-            const result = await runSyncCommand(
-                "restore_webdav_snapshot",
-                { snapshotId },
-                silent,
-            );
+            const result = await runSyncCommand("restore_webdav_snapshot", { snapshotId }, silent);
             await get().loadUsers();
             return result;
+        },
+
+        deleteWebDavSnapshot: async (snapshotId: string, silent = false) => {
+            set({ isSyncing: true, ...(silent ? {} : { error: null }) });
+            try {
+                const result = await invoke<SyncOperationResult>("delete_webdav_snapshot", { snapshotId });
+                await get().listWebDavSnapshots();
+                return result;
+            } catch (error) {
+                if (!silent) {
+                    set({ error: String(error) });
+                }
+                throw error;
+            } finally {
+                set({ isSyncing: false });
+            }
         },
 
         switchUser: async (email: string) => {

@@ -25,6 +25,8 @@ pub struct WebDavSnapshotMeta {
     pub created_at: String,
     pub user_count: usize,
     pub current_user: Option<String>,
+    #[serde(default)]
+    pub user_emails: Vec<String>,
     pub source_platform: String,
     pub source_host: String,
     pub size_bytes: u64,
@@ -197,6 +199,25 @@ async fn put_json<T: Serialize>(
     let body = serde_json::to_vec_pretty(value)
         .map_err(|e| format!("序列化同步元数据失败: {}", e))?;
     put_bytes(client, settings, segments, body, "application/json").await
+}
+
+async fn delete_remote_file(
+    client: &Client,
+    settings: &WebDavSettings,
+    segments: &[String],
+    allow_missing: bool,
+) -> Result<(), String> {
+    let url = build_url(&settings.base_url, segments)?;
+    let response = auth(client.request(Method::DELETE, url), settings)
+        .send()
+        .await
+        .map_err(|e| format!("删除 WebDAV 文件失败: {}", e))?;
+
+    match response.status() {
+        StatusCode::NOT_FOUND if allow_missing => Ok(()),
+        status if status.is_success() => Ok(()),
+        _ => Err(response_error("删除 WebDAV 文件失败", response).await),
+    }
 }
 
 async fn download_bytes(
@@ -481,6 +502,7 @@ async fn sync_to_webdav_inner() -> Result<SyncOperationResult, String> {
         created_at: Utc::now().to_rfc3339(),
         user_count: config.users.len(),
         current_user: config.current_user.clone(),
+        user_emails: config.users.iter().map(|user| user.email.clone()).collect(),
         source_platform: std::env::consts::OS.to_string(),
         source_host: current_host_name(),
         size_bytes,
@@ -572,6 +594,52 @@ async fn restore_snapshot_inner(snapshot_id: String) -> Result<SyncOperationResu
     restore_snapshot_by_meta(metadata).await
 }
 
+async fn delete_snapshot_inner(snapshot_id: String) -> Result<SyncOperationResult, String> {
+    let settings = load_validated_settings(true).await?;
+    let client = http_client()?;
+
+    let mut index = get_optional_json::<SnapshotIndex>(&client, &settings, &index_segments(&settings))
+        .await?
+        .unwrap_or_default();
+
+    let snapshot = index
+        .snapshots
+        .iter()
+        .find(|entry| entry.id == snapshot_id)
+        .cloned()
+        .ok_or_else(|| format!("未找到远端备份 {}", snapshot_id))?;
+
+    delete_remote_file(
+        &client,
+        &settings,
+        &snapshot_file_segments(&settings, &snapshot.file_name),
+        true,
+    )
+    .await?;
+    delete_remote_file(
+        &client,
+        &settings,
+        &snapshot_file_segments(&settings, &format!("{}.json", snapshot.id)),
+        true,
+    )
+    .await?;
+
+    index.snapshots.retain(|entry| entry.id != snapshot_id);
+    put_json(&client, &settings, &index_segments(&settings), &index).await?;
+
+    if let Some(latest) = index.snapshots.first() {
+        put_json(&client, &settings, &latest_segments(&settings), latest).await?;
+    } else {
+        delete_remote_file(&client, &settings, &latest_segments(&settings), true).await?;
+    }
+
+    Ok(SyncOperationResult {
+        message: format!("已删除远端备份 {}", snapshot_id),
+        snapshot_id: index.snapshots.first().map(|entry| entry.id.clone()),
+        synced_at: Some(Utc::now().to_rfc3339()),
+    })
+}
+
 #[tauri::command]
 pub async fn test_webdav_connection(settings: Option<WebDavSettingsInput>) -> Result<String, String> {
     let resolved_settings = if let Some(input) = settings {
@@ -659,4 +727,9 @@ pub async fn restore_webdav_snapshot(snapshot_id: String) -> Result<SyncOperatio
             Err(error)
         }
     }
+}
+
+#[tauri::command]
+pub async fn delete_webdav_snapshot(snapshot_id: String) -> Result<SyncOperationResult, String> {
+    delete_snapshot_inner(snapshot_id).await
 }
