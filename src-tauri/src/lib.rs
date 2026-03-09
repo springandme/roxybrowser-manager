@@ -108,6 +108,7 @@ pub fn run() {
             sync::list_webdav_snapshots,
             sync::pull_latest_from_webdav,
             sync::restore_webdav_snapshot,
+            sync::delete_webdav_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
