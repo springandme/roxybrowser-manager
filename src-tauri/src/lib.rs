@@ -5,12 +5,29 @@ use commands::{process, profile, settings, sync};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    AppHandle, Manager, Runtime, WindowEvent,
 };
+
+fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app);
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
@@ -18,7 +35,8 @@ pub fn run() {
             // 创建系统托盘菜单
             let show = MenuItemBuilder::with_id("show", "显示窗口").build(app)?;
             let separator1 = tauri::menu::PredefinedMenuItem::separator(app)?;
-            let start_roxy = MenuItemBuilder::with_id("start_roxy", "启动 RoxyBrowser").build(app)?;
+            let start_roxy =
+                MenuItemBuilder::with_id("start_roxy", "启动 RoxyBrowser").build(app)?;
             let stop_roxy = MenuItemBuilder::with_id("stop_roxy", "停止 RoxyBrowser").build(app)?;
             let separator2 = tauri::menu::PredefinedMenuItem::separator(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
@@ -39,10 +57,7 @@ pub fn run() {
                 .tooltip("RoxyBrowser Manager")
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(app);
                     }
                     "start_roxy" => {
                         let _ = process::start_roxy();
@@ -58,10 +73,7 @@ pub fn run() {
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button, .. } = event {
                         if button == tauri::tray::MouseButton::Left {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
+                            show_main_window(&tray.app_handle());
                         }
                     }
                 })

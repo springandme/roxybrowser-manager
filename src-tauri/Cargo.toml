@@ -1,6 +1,6 @@
 [package]
 name = "roxybrowser-manager"
-version = "1.4.0"
+version = "1.4.1"
 description = "RoxyBrowser 多账户管理与切换工具"
 authors = ["You"]
 license = "MIT"
@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-process = "2"
 tauri-plugin-dialog = "2"
