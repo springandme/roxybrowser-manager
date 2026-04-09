@@ -14,6 +14,13 @@ export interface UserProfile {
     note: string;
 }
 
+export interface ToastItem {
+    id: string;
+    type: "success" | "error" | "info";
+    message: string;
+    duration: number;
+}
+
 interface RoxyStatus {
     isRunning: boolean;
     pid: number | null;
@@ -31,7 +38,10 @@ interface AppState {
     wizardOpen: boolean;
     wizardStep: number;
     settingsModalOpen: boolean;
+    toasts: ToastItem[];
 
+    addToast: (type: ToastItem["type"], message: string, duration?: number) => void;
+    removeToast: (id: string) => void;
     loadUsers: () => Promise<void>;
     refreshStatus: () => Promise<void>;
     loadSyncStatus: () => Promise<SyncStatus | null>;
@@ -118,6 +128,15 @@ export const useStore = create<AppState>((set, get) => {
         wizardOpen: false,
         wizardStep: 0,
         settingsModalOpen: false,
+        toasts: [],
+
+        addToast: (type, message, duration = 3000) => {
+            const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            set((state) => ({ toasts: [...state.toasts, { id, type, message, duration }] }));
+        },
+        removeToast: (id) => {
+            set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+        },
 
         loadUsers: async () => {
             try {

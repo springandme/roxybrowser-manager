@@ -5,7 +5,8 @@ import UserCard from "./UserCard";
 import AddUserWizard from "./AddUserWizard";
 import SettingsModal from "./SettingsModal";
 import WebDavModal from "./WebDavModal";
-import { useEffect, useState } from "react";
+import Toast from "./Toast";
+import { useEffect, useRef, useState } from "react";
 
 export default function Dashboard() {
     const {
@@ -25,12 +26,14 @@ export default function Dashboard() {
         settingsModalOpen,
         openSettingsModal,
         closeSettingsModal,
+        addToast,
     } = useStore();
     const [webDavModalOpen, setWebDavModalOpen] = useState(false);
     const [theme, setTheme] = useState<"light" | "dark">(() => {
         const saved = localStorage.getItem("theme");
         return (saved as "light" | "dark") || "dark";
     });
+    const dropdownRef = useRef<HTMLDetailsElement>(null);
 
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
@@ -57,7 +60,9 @@ export default function Dashboard() {
     }, [openWizard, refreshStatus]);
 
     const closeDropdown = () => {
-        (document.activeElement as HTMLElement | null)?.blur();
+        if (dropdownRef.current) {
+            dropdownRef.current.open = false;
+        }
     };
 
     const toggleTheme = () => {
@@ -65,28 +70,32 @@ export default function Dashboard() {
     };
 
     const handleExportWithDialog = async () => {
+        closeDropdown();
         try {
             const selectedPath = await invoke<string | null>("browse_for_folder", { title: "选择导出目录" });
             if (selectedPath) {
                 const result = await exportProfiles(selectedPath);
-                alert(result);
+                addToast("success", result);
             }
         } catch (exportError) {
-            alert(`导出失败: ${exportError}`);
+            addToast("error", `导出失败: ${exportError}`);
         }
     };
 
     const handleImportWithDialog = async () => {
+        closeDropdown();
         try {
             const selectedPath = await invoke<string | null>("browse_for_folder", { title: "选择导入配置目录" });
             if (selectedPath) {
                 const result = await importProfiles(selectedPath);
-                alert(result);
+                addToast("success", result);
             }
         } catch (importError) {
-            alert(`导入失败: ${importError}`);
+            addToast("error", `导入失败: ${importError}`);
         }
     };
+
+    const busy = isLoading || isSyncing;
 
     return (
         <div className="container mx-auto p-6 max-w-3xl">
@@ -106,68 +115,56 @@ export default function Dashboard() {
                     >
                         {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                     </button>
-                    <div className="dropdown dropdown-end">
-                        <div tabIndex={0} role="button" className="btn btn-ghost btn-sm">
+                    <details ref={dropdownRef} className="dropdown dropdown-end">
+                        <summary className="btn btn-ghost btn-sm">
                             <Settings className="w-5 h-5" />
-                        </div>
-                        <ul tabIndex={0} className="dropdown-content menu bg-base-200 rounded-box z-50 w-64 p-2 shadow-lg">
+                        </summary>
+                        <ul className="dropdown-content menu bg-base-200 rounded-box z-50 w-64 p-2 shadow-lg">
                             <li>
-                                <a
-                                    onClick={(e) => {
-                                        e.preventDefault();
+                                <button
+                                    onClick={() => {
                                         closeDropdown();
                                         openSettingsModal();
                                     }}
-                                    className={isLoading || isSyncing ? "disabled" : ""}
+                                    disabled={busy}
                                 >
                                     <FolderOpen className="w-4 h-4" />
                                     配置 RoxyBrowser 路径
-                                </a>
+                                </button>
                             </li>
                             <li>
-                                <a
-                                    onClick={(e) => {
-                                        e.preventDefault();
+                                <button
+                                    onClick={() => {
                                         closeDropdown();
                                         setWebDavModalOpen(true);
                                     }}
-                                    className={isLoading || isSyncing ? "disabled" : ""}
+                                    disabled={busy}
                                 >
                                     <Cloud className="w-4 h-4" />
-                                    WebDAV
-                                </a>
+                                    WebDAV 云备份
+                                </button>
                             </li>
+                            <li></li>
                             <li>
-                                <hr className="my-1 border-base-300" />
-                            </li>
-                            <li>
-                                <a
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        closeDropdown();
-                                        handleExportWithDialog();
-                                    }}
-                                    className={isLoading || isSyncing || users.length === 0 ? "disabled" : ""}
+                                <button
+                                    onClick={handleExportWithDialog}
+                                    disabled={busy || users.length === 0}
                                 >
                                     <Download className="w-4 h-4" />
                                     导出配置
-                                </a>
+                                </button>
                             </li>
                             <li>
-                                <a
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        closeDropdown();
-                                        handleImportWithDialog();
-                                    }}
-                                    className={isLoading || isSyncing ? "disabled" : ""}
+                                <button
+                                    onClick={handleImportWithDialog}
+                                    disabled={busy}
                                 >
                                     <Upload className="w-4 h-4" />
                                     导入配置
-                                </a>
+                                </button>
                             </li>
                         </ul>
-                    </div>
+                    </details>
                 </div>
             </div>
 
@@ -190,7 +187,7 @@ export default function Dashboard() {
                             <button
                                 className="btn btn-ghost btn-sm gap-1"
                                 onClick={refreshStatus}
-                                disabled={isLoading || isSyncing}
+                                disabled={busy}
                             >
                                 <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
                                 刷新
@@ -198,7 +195,7 @@ export default function Dashboard() {
                             <button
                                 className="btn btn-primary btn-sm gap-1"
                                 onClick={openWizard}
-                                disabled={isLoading || isSyncing}
+                                disabled={busy}
                             >
                                 <Plus className="w-4 h-4" />
                                 添加用户
@@ -214,7 +211,7 @@ export default function Dashboard() {
                         <div className="card-body items-center text-center py-8">
                             <User className="w-12 h-12 text-base-content/30" />
                             <p className="text-base-content/60">暂无用户</p>
-                            <p className="text-sm text-base-content/40">点击上方“添加用户”按钮添加第一个用户</p>
+                            <p className="text-sm text-base-content/40">点击上方"添加用户"按钮添加第一个用户</p>
                         </div>
                     </div>
                 ) : (
@@ -228,7 +225,7 @@ export default function Dashboard() {
                 <button
                     className="btn btn-success flex-1 gap-2"
                     onClick={startRoxy}
-                    disabled={isLoading || isSyncing || roxyStatus.isRunning}
+                    disabled={busy || roxyStatus.isRunning}
                 >
                     <Play className="w-4 h-4" />
                     启动
@@ -236,7 +233,7 @@ export default function Dashboard() {
                 <button
                     className="btn btn-error flex-1 gap-2"
                     onClick={stopRoxy}
-                    disabled={isLoading || isSyncing || !roxyStatus.isRunning}
+                    disabled={busy || !roxyStatus.isRunning}
                 >
                     <Square className="w-4 h-4" />
                     停止
@@ -244,12 +241,13 @@ export default function Dashboard() {
             </div>
 
             <div className="mt-4 text-center text-xs text-base-content/40">
-                快捷键: ⌘N 添加用户 | ⌘R 刷新状态
+                快捷键: Ctrl+N 添加用户 | Ctrl+R 刷新状态
             </div>
 
             {wizardOpen && <AddUserWizard />}
             <SettingsModal isOpen={settingsModalOpen} onClose={closeSettingsModal} />
             <WebDavModal isOpen={webDavModalOpen} onClose={() => setWebDavModalOpen(false)} />
+            <Toast />
         </div>
     );
 }

@@ -11,6 +11,7 @@ export default function UserCard({ user, isActive }: UserCardProps) {
     const { switchUser, deleteUser, updateUserNote, isLoading } = useStore();
     const [isEditingNote, setIsEditingNote] = useState(false);
     const [noteValue, setNoteValue] = useState(user.note || "");
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const handleSwitch = () => {
         if (!isActive) {
@@ -19,9 +20,8 @@ export default function UserCard({ user, isActive }: UserCardProps) {
     };
 
     const handleDelete = () => {
-        if (confirm(`确定要删除用户 ${user.email} 吗？\n\n此操作将删除该用户的本地配置备份。`)) {
-            deleteUser(user.email);
-        }
+        deleteUser(user.email);
+        setShowDeleteConfirm(false);
     };
 
     const handleEditNote = () => {
@@ -99,14 +99,27 @@ export default function UserCard({ user, isActive }: UserCardProps) {
                         </button>
                         <button
                             className="btn btn-ghost btn-sm text-error"
-                            onClick={handleDelete}
-                            disabled={isLoading || isActive}
+                            onClick={() => setShowDeleteConfirm(true)}
+                            disabled={isLoading || isActive || showDeleteConfirm}
                             title={isActive ? "无法删除当前用户" : "删除用户"}
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
                     </div>
                 </div>
+
+                {/* 删除确认 */}
+                {showDeleteConfirm && (
+                    <div className="mt-2 flex items-center gap-2 bg-error/10 rounded-lg px-3 py-2">
+                        <span className="text-sm text-error flex-1">确定删除 {user.email}？</span>
+                        <button className="btn btn-error btn-xs" onClick={handleDelete}>
+                            确认
+                        </button>
+                        <button className="btn btn-ghost btn-xs" onClick={() => setShowDeleteConfirm(false)}>
+                            取消
+                        </button>
+                    </div>
+                )}
 
                 {/* 备注编辑区域 */}
                 {isEditingNote ? (
